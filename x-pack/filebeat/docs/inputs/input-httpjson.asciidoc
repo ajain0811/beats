@@ -1,0 +1,255 @@
+[role="xpack"]
+
+:type: httpjson
+
+[id="{beatname_lc}-input-{type}"]
+=== HTTP JSON input
+
+++++
+<titleabbrev>HTTP JSON</titleabbrev>
+++++
+
+beta[]
+
+Use the `httpjson` input to read messages from an HTTP API with JSON payloads.
+
+For example, this input is used to retrieve MISP threat indicators in the
+Filebeat <<filebeat-module-misp,MISP>> module.
+
+This input supports retrieval at a configurable interval and pagination.
+
+Example configurations:
+
+["source","yaml",subs="attributes"]
+----
+{beatname_lc}.inputs:
+# Fetch your public IP every minute.
+- type: httpjson
+  url: https://api.ipify.org/?format=json
+  interval: 1m
+  processors:
+    - decode_json_fields
+        fields: [message]
+        target: json
+----
+
+["source","yaml",subs="attributes"]
+----
+{beatname_lc}.inputs:
+- type: httpjson
+  url: http://localhost:9200/_search?scroll=5m
+  http_method: POST
+  json_objects_array: hits.hits
+  pagination:
+    extra_body_content:
+      scroll: 5m
+    id_field: _scroll_id
+    req_field: scroll_id
+    url: http://localhost:9200/_search/scroll
+----
+
+
+==== Configuration options
+
+The `httpjson` input supports the following configuration options plus the
+<<{beatname_lc}-input-{type}-common-options>> described later.
+
+[float]
+==== `api_key`
+
+API key to access the HTTP API. When set, this adds an `Authorization` header to
+the HTTP request with this as the value.
+
+[float]
+==== `http_client_timeout`
+
+Duration before declaring that the HTTP client connection has timed out.
+Defaults to `60s`. Valid time units are `ns`, `us`, `ms`, `s` (default), `m`,
+`h`.
+
+[float]
+==== `http_headers`
+
+Additional HTTP headers to set in the requests. The default value is `null`
+(no additional headers).
+
+["source","yaml",subs="attributes"]
+----
+- type: httpjson
+  http_headers:
+    Authorization: 'Basic aGVsbG86d29ybGQ='
+----
+
+[float]
+==== `http_method`
+
+HTTP method to use when making requests. `GET` or `POST` are the options.
+Defaults to `GET`.
+
+[float]
+==== `http_request_body`
+
+An optional HTTP POST body. The configuration value must be an object, and it
+will be encoded to JSON. This is only valid when `http_method` is `POST`.
+Defaults to `null` (no HTTP body).
+
+["source","yaml",subs="attributes"]
+----
+- type: httpjson
+  http_method: POST
+  http_request_body:
+    query:
+      bool:
+        filter:
+          term:
+            type: authentication
+----
+
+[float]
+==== `interval`
+
+Duration between repeated requests. By default, the interval is `0` which means
+it performs a single request then stops. It may make additional pagination
+requests in response to the initial request if pagination is enabled.
+
+[float]
+==== `json_objects_array`
+
+If the response body contains a JSON object containing an array then this option
+specifies the key containing that array. Each object in that array will generate
+an event. This example response contains an array called `events` that we want
+to index.
+
+["source","json",subs="attributes"]
+----
+{
+  "time": "2020-06-02 23:22:32 UTC",
+  "events": [
+    {
+      "timestamp": "2020-05-02 11:10:03 UTC",
+      "event": {
+        "category": "authorization"
+      },
+      "user": {
+        "name": "fflintstone"
+      }
+    },
+    {
+      "timestamp": "2020-05-05 13:03:11 UTC",
+      "event": {
+        "category": "authorization"
+      },
+      "user": {
+        "name": "brubble"
+      }
+    }
+  ]
+}
+----
+
+The config needs to specify `events` as the `json_objects_array` value.
+
+["source","yaml",subs="attributes"]
+----
+- type: httpjson
+  json_objects_array: events
+----
+
+[float]
+==== `no_http_body`
+
+Force HTTP requests to be sent with an empty HTTP body. Defaults to `false`.
+This option cannot be used with `http_request_body`,
+`pagination.extra_body_content`, or `pagination.req_field`.
+
+[float]
+==== `pagination.enabled`
+
+The `enabled` setting can be used to disable the pagination configuration by
+setting it to `false`. The default value is `true`.
+
+NOTE: Pagination settings are disabled if either `enabled` is set to `false` or
+the `pagination` section is missing.
+
+[float]
+==== `pagination.extra_body_content`
+
+An object containing additional fields that should be included in the pagination
+request body. Defaults to `null`.
+
+["source","yaml",subs="attributes"]
+----
+- type: httpjson
+  pagination.extra_body_content:
+    max_items: 500
+----
+
+[float]
+==== `pagination.header.field_name`
+
+The name of the HTTP header in the response that is used for pagination control.
+The header value will be extracted from the response and used to make the next
+pagination response. `pagination.header.regex_pattern` can be used to select
+a subset of the value.
+
+[float]
+==== `pagination.header.regex_pattern`
+
+The regular expression pattern to use for retrieving the pagination information
+from the HTTP header field specified above. The first match becomes as the
+value.
+
+[float]
+==== `pagination.id_field`
+
+The name of a field in the JSON response body to use as the pagination ID.
+The value will be included in the next pagination request under the key
+specified by the `pagination.req_field` value.
+
+[float]
+==== `pagination.req_field`
+
+The name of the field to include in the pagination JSON request body containing
+the pagination ID defined by the `pagination.id_field` field.
+
+[float]
+==== `pagination.url`
+
+This specifies the URL for sending pagination requests. Defaults to the `url`
+value. This is only needed when the pagination requests need to be routed to
+a different URL.
+
+[float]
+==== `rate_limit.limit`
+
+This specifies the field in the HTTP header of the response that specifies the
+total limit.
+
+[float]
+==== `rate_limit.remaining`
+
+This specifies the field in the HTTP header of the response that specifies the
+remaining quota of the rate limit.
+
+[float]
+==== `rate_limit.reset`
+
+This specifies the field in the HTTP Header of the response that specifies the
+epoch time when the rate limit will reset.
+
+[float]
+==== `ssl`
+
+This specifies SSL/TLS configuration. If the ssl section is missing, the host's
+CAs are used for HTTPS connections. See <<configuration-ssl>> for more
+information.
+
+[float]
+==== `url`
+
+The URL of the HTTP API. Required.
+
+[id="{beatname_lc}-input-{type}-common-options"]
+include::../../../../filebeat/docs/inputs/input-common-options.asciidoc[]
+
+:type!:
